@@ -33,6 +33,10 @@
 
 #define REG_CDR                    0x1F
 
+#define IR_EI 0x02 // Error Interrupt flag
+
+#define SR_TCS 0x08  // Transmit Complete Status
+#define SR_TBS 0x04  // Transmit Buffer Status (free)
 
 ESP32SJA1000Class::ESP32SJA1000Class() :
   CANControllerClass(),
@@ -67,7 +71,9 @@ int ESP32SJA1000Class::begin(long baudRate)
   gpio_pad_select_gpio(_txPin);
 
   modifyRegister(REG_CDR, 0x80, 0x80); // pelican mode
-  modifyRegister(REG_BTR0, 0xc0, 0x40); // SJW = 1
+  modifyRegister(REG_BTR0, 0xc0, 0x40); // SJW = 2
+  // modifyRegister(REG_BTR0, 0xc0, 0x80); // SJW = 3
+  // modifyRegister(REG_BTR0, 0xc0, 0x00); // SJW = 1
   modifyRegister(REG_BTR1, 0x70, 0x10); // TSEG2 = 1
 
   switch (baudRate) {
@@ -169,7 +175,7 @@ int ESP32SJA1000Class::endPacket()
   }
 
   // wait for TX buffer to free
-  while ((readRegister(REG_SR) & 0x04) != 0x04) {
+  while (!(readRegister(REG_SR) & SR_TBS)) {
     yield();
   }
 
@@ -199,19 +205,31 @@ int ESP32SJA1000Class::endPacket()
     // self reception request
     modifyRegister(REG_CMR, 0x1f, 0x10);
   } else {
+	// Check one more time to be sure the tx buffer is free
+	while (!(readRegister(REG_SR) & SR_TBS)) {
+	  yield(); // Allow background tasks to happen
+	}
+
+	// Wait for bus to be recessive before transmitting
+	while (readRegister(REG_SR) & 0x10) { // SR_RS = Receive Status = 1 means dominant
+	  delayMicroseconds(10);
+	}
+
     // transmit request
     modifyRegister(REG_CMR, 0x1f, 0x01);
   }
 
-  // wait for TX complete
-  while ((readRegister(REG_SR) & 0x08) != 0x08) {
-    if (readRegister(REG_ECC) == 0xd9) {
-      modifyRegister(REG_CMR, 0x1f, 0x02); // error, abort
-      return 0;
-    }
-    yield();
+  // wait for TX complete and buffer to be free, then check for errors
+  while (!((readRegister(REG_SR) & (SR_TCS | SR_TBS)) == (SR_TCS | SR_TBS))) { 
+	  if (readRegister(REG_IR) & IR_EI) { // Error interrupt must be set to check for an error code
+		  if (readRegister(REG_ECC) != 0x00) { // Check error code
+			  modifyRegister(REG_CMR, 0x1F, 0x02); // Abort transmission
+			  return 0;
+		  }
+	  }
+	  yield(); // Allow multitasking
   }
-
+  
   return 1;
 }
 
@@ -258,7 +276,7 @@ int ESP32SJA1000Class::parsePacket()
   return _rxDlc;
 }
 
-void ESP32SJA1000Class::onReceive(void(*callback)(int))
+void ESP32SJA1000Class::onReceive(TCallback callback)
 {
   CANControllerClass::onReceive(callback);
 
