@@ -31,6 +31,7 @@
 #define REG_ACRn(n)                (0x10 + n)
 #define REG_AMRn(n)                (0x14 + n)
 
+#define REG_EIR                    0x1C
 #define REG_CDR                    0x1F
 
 #define IR_EI 0x02 // Error Interrupt flag
