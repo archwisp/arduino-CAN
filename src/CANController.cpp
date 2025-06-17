@@ -5,6 +5,7 @@
 
 CANControllerClass::CANControllerClass() :
   _onReceive(NULL),
+  _onError(NULL),
 
   _packetBegun(false),
   _txId(-1),
@@ -183,6 +184,11 @@ void CANControllerClass::flush()
 void CANControllerClass::onReceive(TCallback callback)
 {
   _onReceive = callback;
+}
+
+void CANControllerClass::onError(TErrorCallback callback)
+{
+  _onError = callback;
 }
 
 int CANControllerClass::filter(int /*id*/, int /*mask*/)

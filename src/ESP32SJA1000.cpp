@@ -394,12 +394,13 @@ void ESP32SJA1000Class::handleInterrupt()
 {
   uint8_t ir = readRegister(REG_IR);
 
-  if (ir & 0x01) {
+  if (ir & IR_EI) { // Error interrupt must be set to check for an error code
+    _onError(readRegister(REG_EIR), readRegister(REG_ECC));
+  } else if (ir & 0x01) {
     // received packet, parse and call callback
     parsePacket();
-
     _onReceive(available());
-  }
+  } 
 }
 
 uint8_t ESP32SJA1000Class::readRegister(uint8_t address)
