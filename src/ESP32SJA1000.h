@@ -11,6 +11,11 @@
 #define DEFAULT_CAN_RX_PIN GPIO_NUM_4
 #define DEFAULT_CAN_TX_PIN GPIO_NUM_5
 
+struct SJA1000Status {
+    uint32_t apb_freq;
+    uint8_t mode, clk_div, btr0, btr1;
+};
+
 class ESP32SJA1000Class : public CANControllerClass {
 
 public:
@@ -40,6 +45,11 @@ public:
 
   void dumpRegisters(Stream& out);
   uint8_t readRegister(uint8_t address);
+  bool isTxBufferFree();
+  bool isTxComplete();
+  bool isBusRecessive();
+  bool isReadyToTransmit();
+  SJA1000Status getStatus();
 
 private:
   void reset();
@@ -56,6 +66,7 @@ private:
   gpio_num_t _txPin;
   bool _loopback;
   intr_handle_t _intrHandle;
+  bool _transmitting;
 };
 
 extern ESP32SJA1000Class CAN;

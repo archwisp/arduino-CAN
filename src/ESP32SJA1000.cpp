@@ -7,6 +7,11 @@
 #include "soc/dport_reg.h"
 #include "driver/gpio.h"
 
+// These are to read the APB clock speed
+#include <soc/rtc_cntl_reg.h>
+#include <soc/soc.h>
+#include <esp32/rom/rtc.h>
+
 #include "ESP32SJA1000.h"
 
 #define REG_BASE                   0x3ff6b000
@@ -72,75 +77,88 @@ int ESP32SJA1000Class::begin(long baudRate)
   gpio_pad_select_gpio(_txPin);
 
   modifyRegister(REG_CDR, 0x80, 0x80); // pelican mode
-  modifyRegister(REG_BTR0, 0xc0, 0x40); // SJW = 2
-  // modifyRegister(REG_BTR0, 0xc0, 0x80); // SJW = 3
-  // modifyRegister(REG_BTR0, 0xc0, 0x00); // SJW = 1
-  modifyRegister(REG_BTR1, 0x70, 0x10); // TSEG2 = 1
 
+  // Masks:
+  // 0xc0: bits 6-7
+  // 0x3f: bits 0-5
+  //
+  // 0x80: bit 7
+  // 0x70: bits 4-6
+  // 0x0f: bits 0-3
+  //
+  // Validate with python:
+  // format(ord(chr(0xff & ~0x07 | 0x40)), 'b').zfill(8)
+
+  // Final SJW, BRP, TSEG1, and TSEG2 values are regval + 1
+  uint8_t sjw, brp, ts, tseg1, tseg2;
+  
   switch (baudRate) {
-    case (long)1000E3:
-      modifyRegister(REG_BTR1, 0x0f, 0x04);
-      modifyRegister(REG_BTR0, 0x3f, 4);
-      break;
-
     case (long)500E3:
-      modifyRegister(REG_BTR1, 0x0f, 0x0c);
-      modifyRegister(REG_BTR0, 0x3f, 4);
+      // Target config is 500kbps, 75% sample point, triple sampling disabled
+      // ESP32 has an 80 Mhz APB clock (79998976 hz to be exact), 
+      // 80E6 / 500E3 = 160
+      // So theoretically, (BRP +1) * (1 + TSEG1+1 + TSEG2+1) must equal 160
+	  // The TWAI library 500k settings are brp=8, tseg_1=15, tseg_2=4, sjw=3, triple_sampling=false
+      // Which is 8 * (1 + 15 + 4) = 160
+      // But that doesn't seem to work at all 
+      // The ESP32-WROOM-32E datasheet says the crystal on this board is 40 Mhz 
+      // The TJA1000 datasheet says the clock is 24 Mhz
+	  // The clock divider is set to 0x00
+	  // The TJA1000 datasheet says CLKDIV 0x00 = 2 and 0x01 = 1
+	  // So let's do some experiments
+
+	  // 20 Mhz = 20E6/500E3 = 40 = 2x20; brp=2; 20x.75=15 (75% sample point); tseg1=15; 20-15=5; tseg2=5;
+	  // Acks first scanner packet, sends response, scaner acks, triggers CAN error on next scanner tx bit
+	  sjw = 2; ts = 0; brp = 2, tseg1 = 15, tseg2 = 5;
+	  
+	  // Same: sjw = 2; ts = 0; brp = 2, tseg1 = 14, tseg2 = 6;
+	  // Nope: sjw = 2; ts = 0; brp = 2, tseg1 = 15, tseg2 = 6;
+	  // sjw = 2; ts = 0; brp = 2, tseg1 = 16, tseg2 = 4;
+
+	  // 24 Mhz = 24E6/500E3 = 48 = 3x16; brp=3; 16x.75=12, tseg1=12; 16-12=4; tseg2=4;
+	  // Triggers error on first scanner packet CRC
+	  // sjw = 3; ts = 0; brp = 3, tseg1 = 12, tseg2 = 4;
+	  
+	  // 12 Mhz = 12E6/500E3 = 24 = 1x24; brp=1; 24*.75=18; tseg1=18; 24-18=6; tseg2=6; 
+      // Triggers CAN error after first scanner tx bit
+	  // sjw = 3; ts = 0; brp = 1, tseg1 = 18, tseg2 = 6;
+	  
+	  // 40 Mhz = 40E6/500E3 = 80 = 4x20; brp=4; 20x.75=15 (75% sample point); tseg1=15; 20-15=5; tseg2=5;
+	  // Triggers error after first scanner tx data bit
+	  // sjw = 3; ts = 0; brp = 4, tseg1 = 15, tseg2 = 5;
+
+	  // 80 Mhz = 80E6/500E3 = 160 = 8x20; brp=8; 20x.75=15; tseg1=15; 20-15=5; tseg2=5;
+	  // Triggers error after first scanner tx data bit
+	  // sjw = 3; ts = 0; brp = 8, tseg1 = 15, tseg2 = 5;
+
+      modifyRegister(REG_BTR0, 0xc0, sjw -1 << 6);   // SJW (bits 6-7) -1 because final value is regval+1
+      modifyRegister(REG_BTR0, 0x3f, brp -1);        // BRP (bits 0-5) -1 because final value is regval+1
+      modifyRegister(REG_BTR1, 0x80, ts << 7);       // Triple Sampling (bit 7)
+      modifyRegister(REG_BTR1, 0x70, tseg2 -1 << 4); // TSEG2 (bits 4-6) -1 because final value is regval+1
+      modifyRegister(REG_BTR1, 0x0f, tseg1 -2);      // TSEG1 (bits 0-3) -2 to account for regval+1 + SYNC bit
       break;
 
-    case (long)250E3:
-      modifyRegister(REG_BTR1, 0x0f, 0x0c);
-      modifyRegister(REG_BTR0, 0x3f, 9);
-      break;
-
-    case (long)200E3:
-      modifyRegister(REG_BTR1, 0x0f, 0x0c);
-      modifyRegister(REG_BTR0, 0x3f, 12);
-      break;
-
-    case (long)125E3:
-      modifyRegister(REG_BTR1, 0x0f, 0x0c);
-      modifyRegister(REG_BTR0, 0x3f, 19);
-      break;
-
-    case (long)100E3:
-      modifyRegister(REG_BTR1, 0x0f, 0x0c);
-      modifyRegister(REG_BTR0, 0x3f, 24);
-      break;
-
-    case (long)80E3:
-      modifyRegister(REG_BTR1, 0x0f, 0x0c);
-      modifyRegister(REG_BTR0, 0x3f, 30);
-      break;
-
-    case (long)50E3:
-      modifyRegister(REG_BTR1, 0x0f, 0x0c);
-      modifyRegister(REG_BTR0, 0x3f, 49);
-      break;
-
-/*
-   Due to limitations in ESP32 hardware and/or RTOS software, baudrate can't be lower than 50kbps.
-   See https://esp32.com/viewtopic.php?t=2142
-*/
     default:
       return 0;
       break;
   }
 
-  modifyRegister(REG_BTR1, 0x80, 0x80); // SAM = 1
   writeRegister(REG_IER, 0xff); // enable all interrupts
 
-  // set filter to allow anything
+  // set filters to allow anything
   writeRegister(REG_ACRn(0), 0x00);
   writeRegister(REG_ACRn(1), 0x00);
   writeRegister(REG_ACRn(2), 0x00);
   writeRegister(REG_ACRn(3), 0x00);
+
   writeRegister(REG_AMRn(0), 0xff);
   writeRegister(REG_AMRn(1), 0xff);
   writeRegister(REG_AMRn(2), 0xff);
   writeRegister(REG_AMRn(3), 0xff);
 
-  modifyRegister(REG_OCR, 0x03, 0x02); // normal output mode
+  // normal output mode
+  modifyRegister(REG_OCR, 0x03, 0x02); 
+  
   // reset error counters
   writeRegister(REG_TXERR, 0x00);
   writeRegister(REG_RXERR, 0x00);
@@ -149,8 +167,12 @@ int ESP32SJA1000Class::begin(long baudRate)
   readRegister(REG_ECC);
   readRegister(REG_IR);
 
-  // normal mode
-  modifyRegister(REG_MOD, 0x08, 0x08);
+  // 0x17 = 0b00010111 → mask for:
+  // Bit 0: RM (Reset Mode)
+  // Bit 1: LOM (Listen Only Mode)
+  // Bit 2: STM (Self-Test Mode)
+  // Bit 4: AFM (Acceptance Filter Mode)
+  // Value 0x00 sets them all to 0x00
   modifyRegister(REG_MOD, 0x17, 0x00);
 
   return 1;
@@ -169,16 +191,33 @@ void ESP32SJA1000Class::end()
   CANControllerClass::end();
 }
 
+bool ESP32SJA1000Class::isTxComplete() {
+    return readRegister(REG_SR) & SR_TCS;
+}
+
+bool ESP32SJA1000Class::isTxBufferFree() {
+    return readRegister(REG_SR) & SR_TBS;
+}
+
+bool ESP32SJA1000Class::isBusRecessive() {
+    return (readRegister(REG_SR) & (1 << 4)) != 0;  // Bit 4 is SR_RX
+}
+
+bool ESP32SJA1000Class::isReadyToTransmit() {
+	return isTxBufferFree() && isBusRecessive();
+}
+
 int ESP32SJA1000Class::endPacket()
 {
   if (!CANControllerClass::endPacket()) {
     return 0;
   }
 
-  // wait for TX buffer to free
-  while (!(readRegister(REG_SR) & SR_TBS)) {
-    yield();
-  }
+  // while (_transmitting == true) {
+	// yield();
+  // }
+
+  _transmitting = true;
 
   int dataReg;
 
@@ -206,31 +245,20 @@ int ESP32SJA1000Class::endPacket()
     // self reception request
     modifyRegister(REG_CMR, 0x1f, 0x10);
   } else {
-	// Check one more time to be sure the tx buffer is free
-	while (!(readRegister(REG_SR) & SR_TBS)) {
-	  yield(); // Allow background tasks to happen
-	}
-
-	// Wait for bus to be recessive before transmitting
-	while (readRegister(REG_SR) & 0x10) { // SR_RS = Receive Status = 1 means dominant
-	  delayMicroseconds(10);
-	}
+    while (!isReadyToTransmit()) {
+      // yield(); // Allow background tasks to happen
+    }
 
     // transmit request
     modifyRegister(REG_CMR, 0x1f, 0x01);
   }
 
-  // wait for TX complete and buffer to be free, then check for errors
-  while (!((readRegister(REG_SR) & (SR_TCS | SR_TBS)) == (SR_TCS | SR_TBS))) { 
-	  if (readRegister(REG_IR) & IR_EI) { // Error interrupt must be set to check for an error code
-		  if (readRegister(REG_ECC) != 0x00) { // Check error code
-			  modifyRegister(REG_CMR, 0x1F, 0x02); // Abort transmission
-			  return 0;
-		  }
-	  }
-	  yield(); // Allow multitasking
+  // wait for TX complete, then return
+  while (!isTxComplete()) {
+	  // yield();
   }
   
+  _transmitting = true;
   return 1;
 }
 
@@ -393,15 +421,25 @@ void ESP32SJA1000Class::dumpRegisters(Stream& out)
 
 void ESP32SJA1000Class::handleInterrupt()
 {
-  uint8_t ir = readRegister(REG_IR);
+  uint8_t ir;
 
-  if (ir & IR_EI) { // Error interrupt must be set to check for an error code
-    _onError(readRegister(REG_EIR), readRegister(REG_ECC));
-  } else if (ir & 0x01) {
-    // received packet, parse and call callback
-    parsePacket();
-    _onReceive(available());
-  } 
+  // Loop to catch all interrupts
+  do {
+  	  uint8_t ir = readRegister(REG_IR); // Read interrupts
+  
+	  if (ir & IR_EI) { // Check error interrupt
+		  uint8_t ecc = readRegister(REG_ECC); // Get error code
+		  if (ecc != 0x00) {
+			  _onError(ir, ecc); // Trigger error buffering callback
+		  }
+	  }
+
+	  if (ir & 0x01) {
+		  // received packet, parse and call callback
+		  parsePacket();
+		  _onReceive(available()); // Trigger packet buffering callback
+	  } 
+  } while (ir); 
 }
 
 uint8_t ESP32SJA1000Class::readRegister(uint8_t address)
@@ -428,6 +466,21 @@ void ESP32SJA1000Class::writeRegister(uint8_t address, uint8_t value)
 void ESP32SJA1000Class::onInterrupt(void* arg)
 {
   ((ESP32SJA1000Class*)arg)->handleInterrupt();
+}
+
+SJA1000Status ESP32SJA1000Class::getStatus() {
+    SJA1000Status status;
+    status.apb_freq = ((READ_PERI_REG(RTC_APB_FREQ_REG)) & UINT16_MAX) << 12;
+    status.mode = CAN.readRegister(REG_MOD);
+    status.clk_div = CAN.readRegister(REG_CDR) & 0x07; // Bits 0-2 of CDR
+    status.btr0 = CAN.readRegister(REG_BTR0);
+    status.btr1 = CAN.readRegister(REG_BTR1);
+    // char bitrate_message[80];
+    // sprintf(bitrate_message, 
+        // "Mode: 0x%02x, APB: %i, CLK DIV: 0x%02x, BTR0: 0x%02x, BTR1: 0x%02x", 
+        // mode, apb_freq, clock_divider, btr0, btr1
+    // );
+    return status;
 }
 
 ESP32SJA1000Class CAN;
