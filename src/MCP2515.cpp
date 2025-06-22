@@ -1,8 +1,6 @@
 // Copyright (c) Sandeep Mistry. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-#ifndef ARDUINO_ARCH_ESP32
-
 #include "MCP2515.h"
 
 #define REG_BFPCTRL                0x0c
@@ -260,6 +258,10 @@ int MCP2515Class::parsePacket()
   return _rxDlc;
 }
 
+bool MCP2515Class::isReadyToTransmit() {
+    return true;
+}
+
 void MCP2515Class::onReceive(void(*callback)(int))
 {
   CANControllerClass::onReceive(callback);
@@ -267,13 +269,9 @@ void MCP2515Class::onReceive(void(*callback)(int))
   pinMode(_intPin, INPUT);
 
   if (callback) {
-    SPI.usingInterrupt(digitalPinToInterrupt(_intPin));
     attachInterrupt(digitalPinToInterrupt(_intPin), MCP2515Class::onInterrupt, LOW);
   } else {
     detachInterrupt(digitalPinToInterrupt(_intPin));
-#ifdef SPI_HAS_NOTUSINGINTERRUPT
-    SPI.notUsingInterrupt(digitalPinToInterrupt(_intPin));
-#endif
   }
 }
 
@@ -489,9 +487,7 @@ void MCP2515Class::writeRegister(uint8_t address, uint8_t value)
 
 void MCP2515Class::onInterrupt()
 {
-  CAN.handleInterrupt();
+    CAN.handleInterrupt();
 }
 
-MCP2515Class CAN;
-
-#endif
+// MCP2515Class CAN;

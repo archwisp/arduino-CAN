@@ -1,8 +1,6 @@
 // Copyright (c) Sandeep Mistry. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-#ifndef ARDUINO_ARCH_ESP32
-
 #ifndef MCP2515_H
 #define MCP2515_H
 
@@ -35,6 +33,7 @@ public:
   virtual int parsePacket();
 
   virtual void onReceive(void(*callback)(int));
+  bool isReadyToTransmit();
 
   using CANControllerClass::filter;
   virtual int filter(int id, int mask);
@@ -71,7 +70,5 @@ private:
 };
 
 extern MCP2515Class CAN;
-
-#endif
 
 #endif

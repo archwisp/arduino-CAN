@@ -471,10 +471,10 @@ void ESP32SJA1000Class::onInterrupt(void* arg)
 SJA1000Status ESP32SJA1000Class::getStatus() {
     SJA1000Status status;
     status.apb_freq = ((READ_PERI_REG(RTC_APB_FREQ_REG)) & UINT16_MAX) << 12;
-    status.mode = CAN.readRegister(REG_MOD);
-    status.clk_div = CAN.readRegister(REG_CDR) & 0x07; // Bits 0-2 of CDR
-    status.btr0 = CAN.readRegister(REG_BTR0);
-    status.btr1 = CAN.readRegister(REG_BTR1);
+    status.mode = readRegister(REG_MOD);
+    status.clk_div = readRegister(REG_CDR) & 0x07; // Bits 0-2 of CDR
+    status.btr0 = readRegister(REG_BTR0);
+    status.btr1 = readRegister(REG_BTR1);
     // char bitrate_message[80];
     // sprintf(bitrate_message, 
         // "Mode: 0x%02x, APB: %i, CLK DIV: 0x%02x, BTR0: 0x%02x, BTR1: 0x%02x", 
@@ -483,6 +483,6 @@ SJA1000Status ESP32SJA1000Class::getStatus() {
     return status;
 }
 
-ESP32SJA1000Class CAN;
+// ESP32SJA1000Class CAN;
 
 #endif
