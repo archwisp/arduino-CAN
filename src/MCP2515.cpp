@@ -74,13 +74,13 @@ int MCP2515Class::begin(long baudRate)
   pinMode(_csPin, OUTPUT);
 
   // start SPI
-  SPI.begin();
+  SPI.begin(18, 19, 23, 5); // SCK, MISO, MOSI, SS
 
-  reset();
+  sendReset();
 
   writeRegister(REG_CANCTRL, 0x80);
   if (readRegister(REG_CANCTRL) != 0x80) {
-    return 0;
+    return -1;
   }
 
   const struct {
@@ -127,7 +127,7 @@ int MCP2515Class::begin(long baudRate)
   }
 
   if (cnf == NULL) {
-    return 0;
+    return -2;
   }
 
   writeRegister(REG_CNF1, cnf[0]);
@@ -142,7 +142,7 @@ int MCP2515Class::begin(long baudRate)
 
   writeRegister(REG_CANCTRL, 0x00);
   if (readRegister(REG_CANCTRL) != 0x00) {
-    return 0;
+    return -3;
   }
 
   return 1;
@@ -417,15 +417,19 @@ void MCP2515Class::dumpRegisters(Stream& out)
       out.print('0');
     }
     out.print(i, HEX);
-    out.print(": 0x");
+    out.print(":0x");
     if (b < 16) {
       out.print('0');
     }
-    out.println(b, HEX);
+    out.print(b, HEX);
+	out.print(" ");
+    if (i % 8 == 7) {
+		out.println();
+	}
   }
 }
 
-void MCP2515Class::reset()
+void MCP2515Class::sendReset()
 {
   SPI.beginTransaction(_spiSettings);
   digitalWrite(_csPin, LOW);
