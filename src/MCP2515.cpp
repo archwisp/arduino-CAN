@@ -6,6 +6,7 @@
 #define REG_BFPCTRL                0x0c
 #define REG_TXRTSCTRL              0x0d
 
+#define REG_CANSTAT                0x0e
 #define REG_CANCTRL                0x0f
 
 #define REG_CNF3                   0x28
@@ -74,14 +75,18 @@ int MCP2515Class::begin(long baudRate)
   pinMode(_csPin, OUTPUT);
 
   // start SPI
-  SPI.begin(18, 19, 23, 5); // SCK, MISO, MOSI, SS
-
+  SPI.begin(18, 19, 23, _csPin); // SCK, MISO, MOSI, SS
+  delay(2000);
+	
   sendReset();
 
+  // 0x80 = Config mode
   writeRegister(REG_CANCTRL, 0x80);
-  if (readRegister(REG_CANCTRL) != 0x80) {
+  if ((readRegister(REG_CANSTAT) & 0xE0) != 0x80) {
     return -1;
   }
+
+  writeRegister(REG_CANCTRL, 0x04); // Enable CLKOUT
 
   const struct {
     long clockFrequency;
@@ -120,15 +125,17 @@ int MCP2515Class::begin(long baudRate)
   const uint8_t* cnf = NULL;
 
   for (unsigned int i = 0; i < (sizeof(CNF_MAPPER) / sizeof(CNF_MAPPER[0])); i++) {
-    if (CNF_MAPPER[i].clockFrequency == _clockFrequency && CNF_MAPPER[i].baudRate == baudRate) {
-      cnf = CNF_MAPPER[i].cnf;
-      break;
-    }
+	if (CNF_MAPPER[i].clockFrequency == _clockFrequency && CNF_MAPPER[i].baudRate == baudRate) {
+	  cnf = CNF_MAPPER[i].cnf;
+	  break;
+	}
   }
 
   if (cnf == NULL) {
-    return -2;
+	return -2;
   }
+
+  // uint8_t cnf[] = { 0x00, 0xB1, 0x04 };
 
   writeRegister(REG_CNF1, cnf[0]);
   writeRegister(REG_CNF2, cnf[1]);
@@ -140,8 +147,10 @@ int MCP2515Class::begin(long baudRate)
   writeRegister(REG_RXBnCTRL(0), FLAG_RXM1 | FLAG_RXM0);
   writeRegister(REG_RXBnCTRL(1), FLAG_RXM1 | FLAG_RXM0);
 
+  // 0x00 = Normal mode
   writeRegister(REG_CANCTRL, 0x00);
-  if (readRegister(REG_CANCTRL) != 0x00) {
+
+  if ((readRegister(REG_CANSTAT) & 0xE0) != 0x00) {
     return -3;
   }
 
@@ -269,7 +278,7 @@ void MCP2515Class::onReceive(void(*callback)(int))
   pinMode(_intPin, INPUT);
 
   if (callback) {
-    attachInterrupt(digitalPinToInterrupt(_intPin), MCP2515Class::onInterrupt, LOW);
+    attachInterrupt(digitalPinToInterrupt(_intPin), MCP2515Class::onInterrupt, FALLING);
   } else {
     detachInterrupt(digitalPinToInterrupt(_intPin));
   }
@@ -436,8 +445,7 @@ void MCP2515Class::sendReset()
   SPI.transfer(0xc0);
   digitalWrite(_csPin, HIGH);
   SPI.endTransaction();
-
-  delayMicroseconds(10);
+  delayMicroseconds(100);
 }
 
 void MCP2515Class::handleInterrupt()
@@ -487,6 +495,7 @@ void MCP2515Class::writeRegister(uint8_t address, uint8_t value)
   SPI.transfer(value);
   digitalWrite(_csPin, HIGH);
   SPI.endTransaction();
+  delay(100);
 }
 
 void MCP2515Class::onInterrupt()
