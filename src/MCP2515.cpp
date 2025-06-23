@@ -54,10 +54,17 @@
 #define FLAG_RXM0                  0x20
 #define FLAG_RXM1                  0x40
 
+#define CMD_WRITE				   0x02
+#define CMD_READ				   0x03
+#define CMD_UPDATE				   0x05
+#define CMD_RESET				   0xC0
+
+#define CANSTAT_NORMAL 			   0x00
+#define CANSTAT_CONFIG 			   0x80
 
 MCP2515Class::MCP2515Class() :
   CANControllerClass(),
-  _spiSettings(10E6, MSBFIRST, SPI_MODE0),
+  _spiSettings(1E6, MSBFIRST, SPI_MODE0),
   _csPin(MCP2515_DEFAULT_CS_PIN),
   _intPin(MCP2515_DEFAULT_INT_PIN),
   _clockFrequency(MCP2515_DEFAULT_CLOCK_FREQUENCY)
@@ -77,16 +84,11 @@ int MCP2515Class::begin(long baudRate)
   // start SPI
   SPI.begin(18, 19, 23, _csPin); // SCK, MISO, MOSI, SS
   delay(2000);
-	
-  sendReset();
 
-  // 0x80 = Config mode
-  writeRegister(REG_CANCTRL, 0x80);
-  if ((readRegister(REG_CANSTAT) & 0xE0) != 0x80) {
-    return -1;
+  // Reset and verify that CANSTAT is in Config mode	
+  if (sendReset() != 1) {
+	return -4;
   }
-
-  writeRegister(REG_CANCTRL, 0x04); // Enable CLKOUT
 
   const struct {
     long clockFrequency;
@@ -135,11 +137,12 @@ int MCP2515Class::begin(long baudRate)
 	return -2;
   }
 
-  // uint8_t cnf[] = { 0x00, 0xB1, 0x04 };
-
   writeRegister(REG_CNF1, cnf[0]);
+  if (readRegister(REG_CNF1) != cnf[0]) { return -5; }
   writeRegister(REG_CNF2, cnf[1]);
+  if (readRegister(REG_CNF2) != cnf[1]) { return -6; }
   writeRegister(REG_CNF3, cnf[2]);
+  if (readRegister(REG_CNF3) != cnf[2]) { return -7; }
 
   writeRegister(REG_CANINTE, FLAG_RXnIE(1) | FLAG_RXnIE(0));
   writeRegister(REG_BFPCTRL, 0x00);
@@ -148,11 +151,12 @@ int MCP2515Class::begin(long baudRate)
   writeRegister(REG_RXBnCTRL(1), FLAG_RXM1 | FLAG_RXM0);
 
   // 0x00 = Normal mode
-  writeRegister(REG_CANCTRL, 0x00);
+  writeRegister(REG_CANCTRL, CANSTAT_NORMAL);
 
-  if ((readRegister(REG_CANSTAT) & 0xE0) != 0x00) {
+  if ((readRegister(REG_CANSTAT) & 0xE0) != CANSTAT_NORMAL) {
     return -3;
   }
+  
 
   return 1;
 }
@@ -438,14 +442,28 @@ void MCP2515Class::dumpRegisters(Stream& out)
   }
 }
 
-void MCP2515Class::sendReset()
+int MCP2515Class::sendReset()
 {
   SPI.beginTransaction(_spiSettings);
   digitalWrite(_csPin, LOW);
-  SPI.transfer(0xc0);
+  SPI.transfer(CMD_RESET);
+  digitalWrite(_csPin, HIGH);
+  delay(10);
+  
+  // Read CANSTAT (cmd 0x03, address 0x0E)
+  digitalWrite(_csPin, LOW);
+  SPI.transfer(CMD_READ);     // READ command
+  SPI.transfer(REG_CANSTAT);     // CANSTAT address
+  uint8_t canstat = SPI.transfer(0x00);  // read value
   digitalWrite(_csPin, HIGH);
   SPI.endTransaction();
-  delayMicroseconds(100);
+
+  // CANSTAT 0x80 == config mode
+  if (canstat != CANSTAT_CONFIG) {
+	return -1;
+  }
+
+  return 1;
 }
 
 void MCP2515Class::handleInterrupt()
@@ -462,15 +480,13 @@ void MCP2515Class::handleInterrupt()
 uint8_t MCP2515Class::readRegister(uint8_t address)
 {
   uint8_t value;
-
   SPI.beginTransaction(_spiSettings);
   digitalWrite(_csPin, LOW);
-  SPI.transfer(0x03);
+  SPI.transfer(CMD_READ);
   SPI.transfer(address);
   value = SPI.transfer(0x00);
   digitalWrite(_csPin, HIGH);
   SPI.endTransaction();
-
   return value;
 }
 
@@ -478,7 +494,7 @@ void MCP2515Class::modifyRegister(uint8_t address, uint8_t mask, uint8_t value)
 {
   SPI.beginTransaction(_spiSettings);
   digitalWrite(_csPin, LOW);
-  SPI.transfer(0x05);
+  SPI.transfer(CMD_UPDATE);
   SPI.transfer(address);
   SPI.transfer(mask);
   SPI.transfer(value);
@@ -490,12 +506,12 @@ void MCP2515Class::writeRegister(uint8_t address, uint8_t value)
 {
   SPI.beginTransaction(_spiSettings);
   digitalWrite(_csPin, LOW);
-  SPI.transfer(0x02);
+  SPI.transfer(CMD_WRITE);
   SPI.transfer(address);
   SPI.transfer(value);
   digitalWrite(_csPin, HIGH);
   SPI.endTransaction();
-  delay(100);
+  // delay(10);
 }
 
 void MCP2515Class::onInterrupt()
