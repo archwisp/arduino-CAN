@@ -5,7 +5,6 @@
 #define MCP2515_H
 
 #include <SPI.h>
-
 #include "CANController.h"
 
 #define MCP2515_DEFAULT_CLOCK_FREQUENCY 16e6
@@ -48,6 +47,7 @@ public:
   void setPins(int cs = MCP2515_DEFAULT_CS_PIN, int irq = MCP2515_DEFAULT_INT_PIN);
   void setSPIFrequency(uint32_t frequency);
   void setClockFrequency(long clockFrequency);
+  static void setDebugOutput(Stream* debug);
 
   void dumpRegisters(Stream& out);
 
@@ -64,6 +64,7 @@ private:
 
 private:
   SPISettings _spiSettings;
+  static Stream* _debug;
   int _csPin;
   int _intPin;
   long _clockFrequency;

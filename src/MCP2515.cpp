@@ -62,6 +62,8 @@
 #define CANSTAT_NORMAL 			   0x00
 #define CANSTAT_CONFIG 			   0x80
 
+Stream* MCP2515Class::_debug;
+
 MCP2515Class::MCP2515Class() :
   CANControllerClass(),
   _spiSettings(1E6, MSBFIRST, SPI_MODE0),
@@ -397,6 +399,10 @@ int MCP2515Class::wakeup()
 
   return 1;
 }
+  
+void MCP2515Class::setDebugOutput(Stream* debug) {
+    _debug = debug;
+}
 
 void MCP2515Class::setPins(int cs, int irq)
 {
@@ -462,6 +468,10 @@ int MCP2515Class::sendReset()
 
 void MCP2515Class::handleInterrupt()
 {
+  if (_debug != nullptr) {
+    _debug->println("handleInterrupt called");
+  }
+
   if (readRegister(REG_CANINTF) == 0) {
     return;
   }
