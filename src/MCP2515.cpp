@@ -62,6 +62,10 @@
 #define CANSTAT_NORMAL 			   0x00
 #define CANSTAT_CONFIG 			   0x80
 
+#define FLAG_TX0IF 0x04  // Bit 2
+#define FLAG_TX1IF 0x08  // Bit 3
+#define FLAG_TX2IF 0x10  // Bit 4
+
 Stream* MCP2515Class::_debug;
 
 MCP2515Class::MCP2515Class() :
@@ -231,9 +235,9 @@ int MCP2515Class::parsePacket()
 
   uint8_t intf = readRegister(REG_CANINTF);
 
-  if (intf & FLAG_RXnIF(0)) {
+  if (intf & FLAG_RXnIF(0)) { // CAN message is available in RX buffer 0
     n = 0;
-  } else if (intf & FLAG_RXnIF(1)) {
+  } else if (intf & FLAG_RXnIF(1)) { // CAN message is available in RX buffer 1
     n = 1;
   } else {
     _rxId = -1;
@@ -255,6 +259,7 @@ int MCP2515Class::parsePacket()
     _rxId = idA;
     _rxRtr = (readRegister(REG_RXBnSIDL(n)) & FLAG_SRR) ? true : false;
   }
+
   _rxDlc = readRegister(REG_RXBnDLC(n)) & 0x0f;
   _rxIndex = 0;
 
@@ -472,13 +477,22 @@ void MCP2515Class::handleInterrupt()
     _debug->println("handleInterrupt called");
   }
 
-  if (readRegister(REG_CANINTF) == 0) {
-    return;
+  if (!(readRegister(REG_CANINTF) & (FLAG_RXnIF(0) | FLAG_RXnIF(1)))) {
+    return; // no frame in RXB0 or RXB1
   }
 
-  while (parsePacket() || _rxId != -1) {
+  int result = parsePacket();
+
+  if (result > 0) {
+      if (_debug != nullptr) {
+        _debug->print("parsePacket result:");
+        _debug->println(result);
+      }
     _onReceive(available());
   }
+
+  _rxId = -1; // Mark buffer as consumed
+
 }
 
 uint8_t MCP2515Class::readRegister(uint8_t address)
