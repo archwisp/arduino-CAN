@@ -6,8 +6,10 @@
 
 #include <Arduino.h>
 
-typedef std::function<void (int packetSize)> TCallback;
-typedef std::function<void (int eir, int ecc)> TErrorCallback;
+// typedef std::function<void (int packetSize)> TCallback;
+// typedef std::function<void (int eir, int ecc)> TErrorCallback;
+typedef void (*TCallback)(int);
+typedef void (*TErrorCallback)(int, int);
 
 class CANControllerClass : public Stream {
 

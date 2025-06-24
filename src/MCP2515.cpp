@@ -275,17 +275,11 @@ bool MCP2515Class::isReadyToTransmit() {
     return true;
 }
 
-void MCP2515Class::onReceive(void(*callback)(int))
+void MCP2515Class::onReceive(TCallback callback)
 {
   CANControllerClass::onReceive(callback);
-
   pinMode(_intPin, INPUT);
-
-  if (callback) {
-    attachInterrupt(digitalPinToInterrupt(_intPin), MCP2515Class::onInterrupt, FALLING);
-  } else {
-    detachInterrupt(digitalPinToInterrupt(_intPin));
-  }
+  attachInterrupt(digitalPinToInterrupt(_intPin), MCP2515Class::onInterrupt, FALLING);
 }
 
 int MCP2515Class::filter(int id, int mask)
