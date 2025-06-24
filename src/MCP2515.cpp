@@ -66,6 +66,12 @@
 #define FLAG_TX1IF 0x08  // Bit 3
 #define FLAG_TX2IF 0x10  // Bit 4
 
+#define FLAG_ERRIF  0x20 // bit 5 of REG_CANINTF (0x2C) 
+#define REG_EFLG    0x2D // Error Flag Register
+#define REG_TEC     0x1C // Transmit Error Counter
+#define REG_REC     0x1D // Receive Error Counter
+
+
 Stream* MCP2515Class::_debug;
 
 MCP2515Class::MCP2515Class() :
@@ -180,8 +186,21 @@ int MCP2515Class::endPacket()
     return 0;
   }
 
-  int n = 0;
+  // 1) pick a free mailbox
+  int n = -1;
+  for (int i = 0; i < 3; i++) {
+	  if (!(readRegister(REG_TXBnCTRL(i)) & 0x08)) {  // TXREQ==0?
+		  n = i;
+		  break;
+	  }
+  }
 
+  if (n < 0) {
+	  // all three mailboxes busy!
+	  return 0;
+  }
+
+  // 2) load ID/DLC/data
   if (_txExtended) {
     writeRegister(REG_TXBnSIDH(n), _txId >> 21);
     writeRegister(REG_TXBnSIDL(n), (((_txId >> 18) & 0x07) << 5) | FLAG_EXIDE | ((_txId >> 16) & 0x03));
@@ -204,29 +223,40 @@ int MCP2515Class::endPacket()
     }
   }
 
+  // 3) request transmit
   writeRegister(REG_TXBnCTRL(n), 0x08);
 
+  // 4) wait for TXREQ to clear, or abort on MLOA/ABTF/timeout
+  unsigned long start = millis();
   bool aborted = false;
-
   while (readRegister(REG_TXBnCTRL(n)) & 0x08) {
-    if (readRegister(REG_TXBnCTRL(n)) & 0x10) {
-      // abort
+    uint8_t s = readRegister(REG_TXBnCTRL(n));
+    if (s & (0x10 /*ABTF*/ | 0x20 /*MLOA*/)) {
       aborted = true;
-
-      modifyRegister(REG_CANCTRL, 0x10, 0x10);
+      break;
     }
-
+    if (millis() - start > 10) {
+      // force‐abort if no ACK
+      modifyRegister(REG_CANCTRL, 0x10, 0x10); // ABAT=1
+      while (readRegister(REG_TXBnCTRL(n)) & 0x08) yield();
+      modifyRegister(REG_CANCTRL, 0x10, 0x00); // ABAT=0
+      aborted = true;
+      break;
+    }
     yield();
   }
 
-  if (aborted) {
-    // clear abort command
-    modifyRegister(REG_CANCTRL, 0x10, 0x00);
-  }
+  // Print the status
+  uint8_t s = readRegister(REG_TXBnCTRL(n));
+  _debug->printf("TXB%d CTRL=0x%02X  TXREQ=%d  ABTF=%d  MLOA=%d\n",
+		  n, s,
+		  !!(s & 0x08),
+		  !!(s & 0x10),
+		  !!(s & 0x20));
 
+  // 5) clear interrupts & return
   modifyRegister(REG_CANINTF, FLAG_TXnIF(n), 0x00);
-
-  return (readRegister(REG_TXBnCTRL(n)) & 0x70) ? 0 : 1;
+  return aborted ? 0 : 1;
 }
 
 int MCP2515Class::parsePacket()
@@ -423,6 +453,17 @@ void MCP2515Class::setSPIFrequency(uint32_t frequency)
 void MCP2515Class::setClockFrequency(long clockFrequency)
 {
   _clockFrequency = clockFrequency;
+}
+
+void MCP2515Class::dumpErrors() {
+	uint8_t intf = readRegister(REG_CANINTF);
+	if (intf & FLAG_ERRIF) {
+		uint8_t eflg = readRegister(REG_EFLG);
+		uint8_t tec  = readRegister(REG_TEC);
+		uint8_t rec  = readRegister(REG_REC);
+		_debug->printf("ERRIF! EFLG=0x%02X  TEC=%u  REC=%u\n", eflg, tec, rec);
+		modifyRegister(REG_CANINTF, FLAG_ERRIF, 0x00);
+	}
 }
 
 void MCP2515Class::dumpRegisters(Stream& out)

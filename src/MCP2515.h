@@ -50,6 +50,7 @@ public:
   static void setDebugOutput(Stream* debug);
 
   void dumpRegisters(Stream& out);
+  void dumpErrors();
 
 private:
   int sendReset();
