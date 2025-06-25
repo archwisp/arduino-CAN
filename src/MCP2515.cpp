@@ -455,6 +455,7 @@ void MCP2515Class::setClockFrequency(long clockFrequency)
   _clockFrequency = clockFrequency;
 }
 
+// ERRIF! EFLG=0x0B  TEC=0  REC=128
 void MCP2515Class::dumpErrors() {
 	uint8_t intf = readRegister(REG_CANINTF);
 	if (intf & FLAG_ERRIF) {
@@ -514,9 +515,9 @@ int MCP2515Class::sendReset()
 
 void MCP2515Class::handleInterrupt()
 {
-  if (_debug != nullptr) {
-    _debug->println("handleInterrupt called");
-  }
+  // if (_debug != nullptr) {
+    // _debug->println("handleInterrupt called");
+  // }
 
   if (!(readRegister(REG_CANINTF) & (FLAG_RXnIF(0) | FLAG_RXnIF(1)))) {
     return; // no frame in RXB0 or RXB1
@@ -525,10 +526,10 @@ void MCP2515Class::handleInterrupt()
   int result = parsePacket();
 
   if (result > 0) {
-      if (_debug != nullptr) {
-        _debug->print("parsePacket result:");
-        _debug->println(result);
-      }
+      // if (_debug != nullptr) {
+        // _debug->print("parsePacket result:");
+        // _debug->println(result);
+      // }
     _onReceive(available());
   }
 
