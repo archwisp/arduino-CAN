@@ -238,12 +238,12 @@ int MCP2515Class::endPacket()
     if (millis() - start > 10) {
       // force‐abort if no ACK
       modifyRegister(REG_CANCTRL, 0x10, 0x10); // ABAT=1
-      while (readRegister(REG_TXBnCTRL(n)) & 0x08) yield();
+      while (readRegister(REG_TXBnCTRL(n)) & 0x08) // yield();
       modifyRegister(REG_CANCTRL, 0x10, 0x00); // ABAT=0
       aborted = true;
       break;
     }
-    yield();
+    // yield();
   }
 
   // Print the status
