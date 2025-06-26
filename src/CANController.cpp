@@ -7,7 +7,7 @@ CANControllerClass::CANControllerClass() :
   _onReceive(NULL),
   _onError(NULL),
 
-  _packetBegun(false),
+  _frameBegun(false),
   _txId(-1),
   _txExtended(-1),
   _txRtr(false),
@@ -31,7 +31,7 @@ CANControllerClass::~CANControllerClass()
 
 int CANControllerClass::begin(long /*baudRate*/)
 {
-  _packetBegun = false;
+  _frameBegun = false;
   _txId = -1;
   _txRtr =false;
   _txDlc = 0;
@@ -50,7 +50,7 @@ void CANControllerClass::end()
 {
 }
 
-int CANControllerClass::beginPacket(int id, int dlc, bool rtr)
+int CANControllerClass::beginFrame(int id, int dlc, bool rtr)
 {
   if (id < 0 || id > 0x7FF) {
     return 0;
@@ -60,7 +60,7 @@ int CANControllerClass::beginPacket(int id, int dlc, bool rtr)
     return 0;
   }
 
-  _packetBegun = true;
+  _frameBegun = true;
   _txId = id;
   _txExtended = false;
   _txRtr = rtr;
@@ -72,7 +72,7 @@ int CANControllerClass::beginPacket(int id, int dlc, bool rtr)
   return 1;
 }
 
-int CANControllerClass::beginExtendedPacket(long id, int dlc, bool rtr)
+int CANControllerClass::beginExtendedFrame(long id, int dlc, bool rtr)
 {
   if (id < 0 || id > 0x1FFFFFFF) {
     return 0;
@@ -82,7 +82,7 @@ int CANControllerClass::beginExtendedPacket(long id, int dlc, bool rtr)
     return 0;
   }
 
-  _packetBegun = true;
+  _frameBegun = true;
   _txId = id;
   _txExtended = true;
   _txRtr = rtr;
@@ -94,12 +94,12 @@ int CANControllerClass::beginExtendedPacket(long id, int dlc, bool rtr)
   return 1;
 }
 
-int CANControllerClass::endPacket()
+int CANControllerClass::endFrame()
 {
-  if (!_packetBegun) {
+  if (!_frameBegun) {
     return 0;
   }
-  _packetBegun = false;
+  _frameBegun = false;
 
   if (_txDlc >= 0) {
     _txLength = _txDlc;
@@ -108,27 +108,27 @@ int CANControllerClass::endPacket()
   return 1;
 }
 
-int CANControllerClass::parsePacket()
+int CANControllerClass::parseFrame()
 {
   return 0;
 }
 
-long CANControllerClass::packetId()
+long CANControllerClass::frameId()
 {
   return _rxId;
 }
 
-bool CANControllerClass::packetExtended()
+bool CANControllerClass::frameExtended()
 {
   return _rxExtended;
 }
 
-bool CANControllerClass::packetRtr()
+bool CANControllerClass::frameRtr()
 {
   return _rxRtr;
 }
 
-int CANControllerClass::packetDlc()
+int CANControllerClass::frameDlc()
 {
   return _rxDlc;
 }
@@ -140,7 +140,7 @@ size_t CANControllerClass::write(uint8_t byte)
 
 size_t CANControllerClass::write(const uint8_t *buffer, size_t size)
 {
-  if (!_packetBegun) {
+  if (!_frameBegun) {
     return 0;
   }
 

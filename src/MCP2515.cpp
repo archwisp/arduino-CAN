@@ -180,9 +180,9 @@ void MCP2515Class::end()
   CANControllerClass::end();
 }
 
-int MCP2515Class::endPacket()
+int MCP2515Class::endFrame()
 {
-  if (!CANControllerClass::endPacket()) {
+  if (!CANControllerClass::endFrame()) {
     return 0;
   }
 
@@ -252,14 +252,13 @@ int MCP2515Class::endPacket()
       _debug->printf("TXB%d CTRL=0x%02X  TXREQ=%d  ABTF=%d  MLOA=%d\n",
               n, s, !!(s & 0x08), !!(s & 0x10), !!(s & 0x20));
   }
-}
 
   // 5) clear interrupts & return
   modifyRegister(REG_CANINTF, FLAG_TXnIF(n), 0x00);
   return aborted ? 0 : 1;
 }
 
-int MCP2515Class::parsePacket()
+int MCP2515Class::parseFrame()
 {
   int n;
 
@@ -527,11 +526,11 @@ void MCP2515Class::handleInterrupt()
     return; // no frame in RXB0 or RXB1
   }
 
-  int result = parsePacket();
+  int result = parseFrame();
 
   if (result > 0) {
       // if (_debug != nullptr) {
-        // _debug->print("parsePacket result:");
+        // _debug->print("parseFrame result:");
         // _debug->println(result);
       // }
     _onReceive(available());

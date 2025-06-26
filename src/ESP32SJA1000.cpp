@@ -108,7 +108,7 @@ int ESP32SJA1000Class::begin(long baudRate)
 	  // So let's do some experiments
 
 	  // 20 Mhz = 20E6/500E3 = 40 = 2x20; brp=2; 20x.75=15 (75% sample point); tseg1=15; 20-15=5; tseg2=5;
-	  // Acks first scanner packet, sends response, scaner acks, triggers CAN error on next scanner tx bit
+	  // Acks first scanner frame, sends response, scaner acks, triggers CAN error on next scanner tx bit
 	  sjw = 2; ts = 0; brp = 2, tseg1 = 15, tseg2 = 5;
 	  
 	  // Same: sjw = 2; ts = 0; brp = 2, tseg1 = 14, tseg2 = 6;
@@ -116,7 +116,7 @@ int ESP32SJA1000Class::begin(long baudRate)
 	  // sjw = 2; ts = 0; brp = 2, tseg1 = 16, tseg2 = 4;
 
 	  // 24 Mhz = 24E6/500E3 = 48 = 3x16; brp=3; 16x.75=12, tseg1=12; 16-12=4; tseg2=4;
-	  // Triggers error on first scanner packet CRC
+	  // Triggers error on first scanner frame CRC
 	  // sjw = 3; ts = 0; brp = 3, tseg1 = 12, tseg2 = 4;
 	  
 	  // 12 Mhz = 12E6/500E3 = 24 = 1x24; brp=1; 24*.75=18; tseg1=18; 24-18=6; tseg2=6; 
@@ -207,9 +207,9 @@ bool ESP32SJA1000Class::isReadyToTransmit() {
 	return isTxBufferFree() && isBusRecessive();
 }
 
-int ESP32SJA1000Class::endPacket()
+int ESP32SJA1000Class::endFrame()
 {
-  if (!CANControllerClass::endPacket()) {
+  if (!CANControllerClass::endFrame()) {
     return 0;
   }
 
@@ -262,10 +262,10 @@ int ESP32SJA1000Class::endPacket()
   return 1;
 }
 
-int ESP32SJA1000Class::parsePacket()
+int ESP32SJA1000Class::parseFrame()
 {
   if ((readRegister(REG_SR) & 0x01) != 0x01) {
-    // no packet
+    // no frame
     return 0;
   }
 
@@ -435,9 +435,9 @@ void ESP32SJA1000Class::handleInterrupt()
 	  }
 
 	  if (ir & 0x01) {
-		  // received packet, parse and call callback
-		  parsePacket();
-		  _onReceive(available()); // Trigger packet buffering callback
+		  // received frame, parse and call callback
+		  parseFrame();
+		  _onReceive(available()); // Trigger frame buffering callback
 	  } 
   } while (ir); 
 }

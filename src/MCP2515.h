@@ -27,9 +27,9 @@ public:
   virtual int begin(long baudRate);
   virtual void end();
 
-  virtual int endPacket();
+  virtual int endFrame();
 
-  virtual int parsePacket();
+  virtual int parseFrame();
 
   virtual void onReceive(void(*callback)(int));
   bool isReadyToTransmit();

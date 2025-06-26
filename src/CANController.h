@@ -6,7 +6,7 @@
 
 #include <Arduino.h>
 
-// typedef std::function<void (int packetSize)> TCallback;
+// typedef std::function<void (int frameSize)> TCallback;
 // typedef std::function<void (int eir, int ecc)> TErrorCallback;
 typedef void (*TCallback)(int);
 typedef void (*TErrorCallback)(int, int);
@@ -17,15 +17,15 @@ public:
   virtual int begin(long baudRate);
   virtual void end();
 
-  int beginPacket(int id, int dlc = -1, bool rtr = false);
-  int beginExtendedPacket(long id, int dlc = -1, bool rtr = false);
-  virtual int endPacket();
+  int beginFrame(int id, int dlc = -1, bool rtr = false);
+  int beginExtendedFrame(long id, int dlc = -1, bool rtr = false);
+  virtual int endFrame();
 
-  virtual int parsePacket();
-  long packetId();
-  bool packetExtended();
-  bool packetRtr();
-  int packetDlc();
+  virtual int parseFrame();
+  long frameId();
+  bool frameExtended();
+  bool frameRtr();
+  int frameDlc();
 
   // from Print
   virtual size_t write(uint8_t byte);
@@ -58,7 +58,7 @@ protected:
   TCallback _onReceive;
   TErrorCallback _onError;
 
-  bool _packetBegun;
+  bool _frameBegun;
   long _txId;
   bool _txExtended;
   bool _txRtr;
