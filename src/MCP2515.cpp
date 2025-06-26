@@ -248,11 +248,11 @@ int MCP2515Class::endPacket()
 
   // Print the status
   uint8_t s = readRegister(REG_TXBnCTRL(n));
-  _debug->printf("TXB%d CTRL=0x%02X  TXREQ=%d  ABTF=%d  MLOA=%d\n",
-		  n, s,
-		  !!(s & 0x08),
-		  !!(s & 0x10),
-		  !!(s & 0x20));
+  if (_debug != nullptr) {
+      _debug->printf("TXB%d CTRL=0x%02X  TXREQ=%d  ABTF=%d  MLOA=%d\n",
+              n, s, !!(s & 0x08), !!(s & 0x10), !!(s & 0x20));
+  }
+}
 
   // 5) clear interrupts & return
   modifyRegister(REG_CANINTF, FLAG_TXnIF(n), 0x00);
@@ -462,7 +462,11 @@ void MCP2515Class::dumpErrors() {
 		uint8_t eflg = readRegister(REG_EFLG);
 		uint8_t tec  = readRegister(REG_TEC);
 		uint8_t rec  = readRegister(REG_REC);
-		_debug->printf("ERRIF! EFLG=0x%02X  TEC=%u  REC=%u\n", eflg, tec, rec);
+
+        if (_debug != nullptr) {
+            _debug->printf("ERRIF! EFLG=0x%02X  TEC=%u  REC=%u\n", eflg, tec, rec);
+        }
+
 		modifyRegister(REG_CANINTF, FLAG_ERRIF, 0x00);
 	}
 }
